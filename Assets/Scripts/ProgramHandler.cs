@@ -12,6 +12,7 @@ public class ProgramHandler : MonoBehaviour
     [SerializeField]
     float executeTime; // in seconds
 
+    public Rect executeWindow = new Rect(Screen.width - 100, Screen.height - 50, 100, 50);
     
     List<Interpreter> interpreters;
 
@@ -29,6 +30,11 @@ public class ProgramHandler : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.F1)) {
             execute = true;
         }
+        if (Input.GetKeyDown(KeyCode.F2)) {
+            foreach (Interpreter i in interpreters) {
+                i.LoadInput();
+            }
+        }
 
         timeElapsed += Time.deltaTime;
         if ((execute) && (timeElapsed >= executeTime)) {
@@ -38,15 +44,35 @@ public class ProgramHandler : MonoBehaviour
             timeElapsed = 0;
             bool stillExecuting = false;
             foreach (Interpreter i in interpreters) {
+                i.ReWriteInput();
                 i.ExecuteNextLine();
+
                 stillExecuting = stillExecuting || i.CanExecute;
             }
             if (!stillExecuting) execute = false;
+
         }
     }
 
+    private void RunPrograms() {
+
+    }
     public void StoreInterpreter(Interpreter i) {
         if (interpreters is null) interpreters = new List<Interpreter>();
         interpreters.Add(i);
     }
+
+    private void OnGUI() {
+        executeWindow = GUI.Window(0, executeWindow, DoMyWindow, "");
+    }
+
+    void DoMyWindow(int windowID) {
+        if (GUI.Button(new Rect(0, 0, 100, 50), "Execute")) {
+            foreach (Interpreter i in interpreters) {
+                i.LoadInput();
+            }
+            execute = true;
+        }
+    }
 }
+

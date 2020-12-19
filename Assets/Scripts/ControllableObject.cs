@@ -5,17 +5,22 @@ using UnityEngine;
 using UnityEngine.UI;
 
 [RequireComponent(typeof(Interpreter))]
-public class ControllableObject : MonoBehaviour
+public class ControllableObject : Interactable
 {
+    public Grid grid;
+
     public Dictionary<string, Action<List<string>>> commandDict;
     ProgramHandler handler;
 
     Interpreter interpreter;
 
+    Vector3 targetPosition;
+
     // Start is called before the first frame update
     void Awake()
     {
         handler = FindObjectOfType<ProgramHandler>();
+        grid = FindObjectOfType<Grid>();
         // add functions
         commandDict = new Dictionary<string, Action<List<string>>> {
             {"move", moveCommand }
@@ -45,6 +50,17 @@ public class ControllableObject : MonoBehaviour
         interpreter.robotController = this;
     }
 
+    public override void OnClick() {
+        interpreter.inputWindowVisible = !interpreter.inputWindowVisible;
+    }
+
+    private void Update() {
+        if (Vector3.Distance(targetPosition, transform.position) > .1f) {
+            transform.position += targetPosition * Time.deltaTime;
+        }
+    }
+
+
     /// <summary>
     /// Basic Move Command. Not Yet Implemented.
     /// Discuss with amos how to appropriately move the robot
@@ -56,6 +72,9 @@ public class ControllableObject : MonoBehaviour
         if (!Int32.TryParse(args[0], out int move_x) || !Int32.TryParse(args[1], out int move_y)) {
             throw new NotImplementedException(); // arguments are not an int
         }
-        Debug.Log("Successful Move Command with args: " + move_x.ToString() + ", " + move_y.ToString());
+
+        targetPosition = new Vector3(move_x * grid.gridSize, 0.0f, move_y * grid.gridSize);
+        // move this shit smoothly but every tick only 1 space * speed of object
+        //Debug.Log("Successful Move Command with args: " + move_x.ToString() + ", " + move_y.ToString());
     }
 }

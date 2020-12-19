@@ -15,14 +15,17 @@ public class Interpreter : MonoBehaviour
      * execute the current program line, which is represented by the programCounter.
      */
     // GameObjects
-    public GameObject thisRobot;
+    public GameObject thisRobot = null;
 
     // Input Objects
+    public bool inputWindowVisible = true;
     [SerializeField]
-    private float inputRectWidth;
+    private float inputRectWidth = 200;
     [SerializeField]
-    private float inputRectHeight;
-    private Rect inputRect;
+    private float inputRectHeight = 250;
+    private Rect inputRect = Rect.zero;
+    private bool reDrawWindow = false;
+    
     private string inputCode = "Initial Input";
 
     internal ControllableObject robotController = null;
@@ -35,8 +38,11 @@ public class Interpreter : MonoBehaviour
     int programCounter = 0; // represents the current line we are executing
     int cur_wait_amount = 0;
     bool cur_waiting = false;
+    
+    // code execution
     List<List<string>> commands; // assume for now we have a way of giving an array of strings to this variable
     Dictionary<string, int> markedLines; // represents the 'marked' program lines we can make when executing the program, to facilitate loops and goto statements
+    Dictionary<string, int> storedVariables; // contains variables stored by the user
 
     private void Start() {
         // Setup required object references;
@@ -60,13 +66,19 @@ public class Interpreter : MonoBehaviour
     private void OnGUI() {
         // all of this OnGUI stuff should be changed later, as it is only intended for development.
         // might need to use the old InputField method again, inside a draggable object.
-        inputRect = GUI.Window(this.GetInstanceID(), inputRect, MoveWindow, "Code Input");
-        //inputRectTransform.rect.position = inputRect.position;
+        if (inputWindowVisible) {
+            inputRect = GUI.Window(this.GetInstanceID(), inputRect, MoveableCodeWindow, "Code Input");
+        }
     }
-    protected void MoveWindow(int windowID) {
+    protected void MoveableCodeWindow(int windowID) {
         float tWidth = inputRectWidth * .01f;
         float tHeight = inputRectHeight * .075f;
         inputCode = GUI.TextArea(new Rect(tWidth, tHeight, inputRectWidth - (2f * tWidth), inputRectHeight - (tHeight * 1.1f)), inputCode);
+
+        if (GUI.Button(new Rect(inputRectWidth - 22, 2, 20, 15), "X")) {
+            Debug.Log("Cross");
+            inputWindowVisible = !inputWindowVisible;
+        }
 
         GUI.DragWindow();
     }
@@ -108,41 +120,85 @@ public class Interpreter : MonoBehaviour
             Debug.Log(String.Join(": ", currentLine));
             // check for basic instructions
             if (currentLine[0] == "goto") {
-                // when we recieve the goto command, we want to check it's argument against the dictionary of marked locations, and change the programCounter to that value
-                if (currentLine.Count != 2) throw new NotImplementedException();
-                if (!markedLines.ContainsKey(currentLine[1])) throw new NotImplementedException();
-
-                programCounter = markedLines[currentLine[1]] + 1;
-            } else if (currentLine[0] == "mark") {
-                if (markedLines == null) markedLines = new Dictionary<string, int>();
-                if (currentLine.Count != 2) throw new NotImplementedException();
-                if (!markedLines.ContainsKey(currentLine[1])) markedLines.Add(currentLine[1], programCounter); // add the current line as a location accessable through loops and goto
-
-                programCounter++;
+                Goto(currentLine);
+                ExecuteNextLine();
+            } else if (currentLine[0] == "mark") { // no time
+                Mark(currentLine);
+                ExecuteNextLine();
             } else if (currentLine[0] == "wait") {
-                // how are we going to implement wait?
-                // does wait do nothing except wait on the current line for x actions?
-                // or does it repeat the above line x times?
-                // or should we have a seperate 'repi' for doing that
-                // for now let's just wait on the current line
-                if (!Int32.TryParse(currentLine[1], out int waitAmount)) throw new NotImplementedException();
-                if (!cur_waiting) {
-                    cur_wait_amount = waitAmount;
-                    cur_waiting = true;
-                }
-
-                if (waitAmount <= 1) {
-                    commands[programCounter][1] = cur_wait_amount.ToString();
-                    cur_waiting = false;
-                    programCounter++;
-                } else {
-                    waitAmount--;
-                    commands[programCounter][1] = waitAmount.ToString();
-                }
+                Wait(currentLine);
+            } else if (currentLine[0] == "seti") {
+                Seti(currentLine);
+                ExecuteNextLine();
+            } else if (currentLine[0] == "tjmp") {
+                Tjmp(currentLine);
+                ExecuteNextLine();
             } else {
                 // for all other commands which are assumed to be object specific commands
                 robotController.ExecuteCommand(currentLine);
                 programCounter++;
+            }
+        }
+    }
+
+    protected void Goto(List<string> command) {
+        // goto [mark]
+        // jump to the given mark
+        // when we recieve the goto command, we want to check it's argument against the dictionary of marked locations, and change the programCounter to that value
+        if (command.Count != 2) throw new NotImplementedException();
+        if (!markedLines.ContainsKey(command[1])) throw new NotImplementedException();
+
+        programCounter = markedLines[command[1]] + 1;
+    }
+    protected void Mark(List<string> command) {
+        // mark [mark]
+        // store the current position as a position to return to
+        if (markedLines == null) markedLines = new Dictionary<string, int>();
+        if (command.Count != 2) throw new NotImplementedException();
+        if (!markedLines.ContainsKey(command[1])) markedLines.Add(command[1], programCounter); // add the current line as a location accessable through loops and goto
+
+        programCounter++;
+    }
+    protected void Wait(List<string> command) {
+        // wait [sec]
+        // how are we going to implement wait?
+        // does wait do nothing except wait on the current line for x actions?
+        // or does it repeat the above line x times?
+        // or should we have a seperate 'repi' for doing that
+        // for now let's just wait on the current line
+        if (!Int32.TryParse(command[1], out int waitAmount)) throw new NotImplementedException();
+        if (!cur_waiting) {
+            cur_wait_amount = waitAmount;
+            cur_waiting = true;
+        }
+
+        if (waitAmount <= 1) {
+            commands[programCounter][1] = cur_wait_amount.ToString();
+            cur_waiting = false;
+            programCounter++;
+        } else {
+            waitAmount--;
+            commands[programCounter][1] = waitAmount.ToString();
+        }
+    }
+    protected void Seti(List<string> command) {
+        // seti [loc] [val]
+        // set the given variable to the given value
+        if (!Int32.TryParse(command[2], out int value)) throw new NotImplementedException();
+        if (storedVariables is null) storedVariables = new Dictionary<string, int>();
+        if (!storedVariables.ContainsKey(command[1])) {
+            storedVariables.Add(command[1], value);
+        } else {
+            storedVariables[command[1]] = value;
+        }
+        programCounter++;
+    }
+    protected void Tjmp(List<string> command) {
+        // tjmp [loc] [mark]
+        // if the value of [loc] is greater than 0, jump to [mark]
+        if (storedVariables.TryGetValue(command[1], out int value)) {
+            if (value > 0) {
+                Goto(new List<string>() { "goto", command[2] });
             }
         }
     }

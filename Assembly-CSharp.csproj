@@ -64,6 +64,9 @@
   <ItemGroup>
     <Compile Include="Assets\Scripts\Class1.cs" />
     <Compile Include="Assets\Scripts\ControllableObject.cs" />
+    <Compile Include="Assets\Scripts\Grid.cs" />
+    <Compile Include="Assets\Scripts\Interactable.cs" />
+    <Compile Include="Assets\Scripts\Interactions.cs" />
     <Compile Include="Assets\Scripts\Interpreter.cs" />
     <Compile Include="Assets\Scripts\ProgramHandler.cs" />
     <Reference Include="UnityEngine">

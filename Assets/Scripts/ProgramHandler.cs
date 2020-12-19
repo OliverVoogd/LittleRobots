@@ -10,7 +10,7 @@ public class ProgramHandler : MonoBehaviour
     /// </summary>
     /// 
     [SerializeField]
-    float executeTime; // in seconds
+    float executeTime = 1; // in seconds
 
     public Rect executeWindow = new Rect(Screen.width - 100, Screen.height - 50, 100, 50);
     

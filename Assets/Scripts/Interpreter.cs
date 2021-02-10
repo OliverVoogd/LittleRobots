@@ -4,6 +4,27 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+public class InputLine {
+    public string command;
+    public List<string> arguments;
+    public int nextExecutable;
+    public bool executable;
+
+    public InputLine(string com, List<string> args) {
+        command = com;
+        arguments = args;
+        executable = false;
+        nextExecutable = -1;
+    }
+
+    public static string GetString(InputLine l) {
+        string s = l.command + ": ";
+        s += String.Join(", ", l.arguments);
+        s += "-> " + l.nextExecutable.ToString() + " ?" + l.executable.ToString() + "\n";
+        return s;
+    }
+}
+
 public class Interpreter : MonoBehaviour
 {
     /* so we want this class to be able to be given text input, and to parse it for 
@@ -25,8 +46,8 @@ public class Interpreter : MonoBehaviour
     private float inputRectHeight = 250;
     private Rect inputRect = Rect.zero;
     private bool reDrawWindow = false;
-    
-    private string inputCode = "Initial Input";
+    private string inputCode = 
+    "move left 1\nmove right 1\nseti count 0\nmark first\nmove right 1\naddi count 1\nseti test count\naddi test -1\ntjmp test out\ngoto first\nmark out";
 
     internal ControllableObject robotController = null;
 
@@ -35,12 +56,19 @@ public class Interpreter : MonoBehaviour
 
     // private variables for code execution
     public bool CanExecute { get; private set; }
-    int programCounter = 0; // represents the current line we are executing
+    int programCounter = -1; // represents the current line we are executing
+    int startProgramCounter = 0;
     int cur_wait_amount = 0;
     bool cur_waiting = false;
     
+    //storing the starting position
+    public bool PositionStored { get; private set; }
+    [SerializeField]
+    private Vector3 startPosition;
+    
     // code execution
-    List<List<string>> commands; // assume for now we have a way of giving an array of strings to this variable
+    //List<List<string>> commands; // the lines that can actually be executed
+    public InputLine[] commands; // struct of all the lines.
     Dictionary<string, int> markedLines; // represents the 'marked' program lines we can make when executing the program, to facilitate loops and goto statements
     Dictionary<string, int> storedVariables; // contains variables stored by the user
 
@@ -57,10 +85,6 @@ public class Interpreter : MonoBehaviour
     private void SetupInputField() {
         Vector3 screenPoint = cam.WorldToScreenPoint(transform.position);
         inputRect = new Rect(screenPoint.x, Screen.height - screenPoint.y, inputRectWidth, inputRectHeight);
-    }
-
-    private void Update() {
-        // temporary input loading
     }
 
     private void OnGUI() {
@@ -84,122 +108,286 @@ public class Interpreter : MonoBehaviour
     }
 
 
-    public void LoadInput() {
-        // we need to load input from the attached text field
-        commands = new List<List<string>>();
-        //string[] loadedCommands = inputField.text.Split('\n');
-        string[] loadedCommands = inputCode.Split('\n');
-        //string[] loadedCommands = new string[] {"move 1 1", "mark first", "move 2 2", "wait 3", "goto first"}; /// this is only testing method of adding commands
-        foreach (string com in loadedCommands) {
-            commands.Add(new List<string>(com.Split()));
-            Debug.Log(commands[commands.Count - 1][0]);
-        }
-        if (commands.Count > 0) CanExecute = true;
-        // at the end of this function we need to have commands representing a list of commands each with 1 keyword and as many arguments as needed.
-    }
-
-    public void ReWriteInput() {
-        string[] joinedCommands = new string[commands.Count];
-        for (int i = 0; i < commands.Count; i++) {
-            joinedCommands[i] = String.Join(" ", commands[i]);
-            if (i == programCounter) {
-                joinedCommands[i] = "\t" + joinedCommands[i];
-            }
-        }
-        inputCode = String.Join("\n", joinedCommands);
-        //inputField.text = String.Join("\n", joinedCommands);
-    }
-
     /// <summary>
     /// This method needs to handle basic code syntax available to all robots, such as 'wait', 'goto', etc
     /// </summary>
     public void ExecuteNextLine() {
-        if (programCounter >= commands.Count) CanExecute = false;
-        if (CanExecute) {
-            List<string> currentLine = commands[programCounter];
+        //if (robotController.FinishedExecutingCommand) programCounter = commands[programCounter].nextExecutable;
+
+        if (!CanExecute) {
+            return;
+        }
+
+        if (!commands[programCounter].executable) {
+            // this should never enter
+            programCounter = commands[programCounter].nextExecutable;
+        }
+
+        if (CanExecute && robotController.FinishedExecutingCommand) {
+            ReWriteInput();
+
+
+            string currentCommand = commands[programCounter].command;
+            List<string> currentLine = commands[programCounter].arguments;
             Debug.Log(String.Join(": ", currentLine));
             // check for basic instructions
-            if (currentLine[0] == "goto") {
-                Goto(currentLine);
-                ExecuteNextLine();
-            } else if (currentLine[0] == "mark") { // no time
-                Mark(currentLine);
-                ExecuteNextLine();
-            } else if (currentLine[0] == "wait") {
-                Wait(currentLine);
-            } else if (currentLine[0] == "seti") {
-                Seti(currentLine);
-                ExecuteNextLine();
-            } else if (currentLine[0] == "tjmp") {
-                Tjmp(currentLine);
-                ExecuteNextLine();
-            } else {
-                // for all other commands which are assumed to be object specific commands
-                robotController.ExecuteCommand(currentLine);
-                programCounter++;
+            switch (currentCommand) {
+                case "goto":
+                    programCounter = Goto(currentLine, programCounter); // this moves program counter itself
+                    break;
+                case "wait":
+                    programCounter = Wait(currentLine, programCounter);
+                    break;
+                case "seti":
+                    programCounter = Seti(currentLine, programCounter);
+                    break;
+                case "tjmp":
+                    programCounter = Tjmp(currentLine, programCounter);
+                    break;
+                case "addi":
+                    programCounter = Addi(currentLine, programCounter);
+                    break;
+                default:
+                    robotController.ExecuteCommand(currentCommand, currentLine);
+                    programCounter = commands[programCounter].nextExecutable;
+                    break;
             }
+        }
+        if (programCounter >= commands.Length || programCounter < 0) {
+            CanExecute = false;
+            programCounter = -1;
+            //ReWriteInput();
+        }
+    }
+    public void ReWriteInput() {
+        if (commands != null) {
+            string[] joinedCommands = new string[commands.Length];
+            for (int i = 0; i < commands.Length; i++) {
+                joinedCommands[i] = String.Join(" ", commands[i].arguments);
+                joinedCommands[i] = commands[i].command + " " + joinedCommands[i];
+                if (i == programCounter) {
+                    joinedCommands[i] = "\t" + joinedCommands[i];
+                }
+            }
+            inputCode = String.Join("\n", joinedCommands);
+            //inputField.text = String.Join("\n", joinedCommands);
         }
     }
 
-    protected void Goto(List<string> command) {
+    /// <summary>
+    /// Reset the state of this interpreter, allowing the code to be read and executed again
+    /// </summary>
+    public void Reset() {
+        programCounter = 0;
+        startProgramCounter = 0;
+        // at this stage, reset moves the objects back to their start position, without animation
+        if (PositionStored)
+            thisRobot.transform.position = startPosition;
+    }
+    /// <summary>
+    /// Setup this interpreter for user code execution, by loading input, parsing it for 'mark' statements,
+    /// and then setting the programCounter as the first executable line
+    /// </summary>
+    public void StartProgram() {
+        LoadInput();
+        PreParseInput();
+        programCounter = startProgramCounter;
+    }
+    /// <summary>
+    /// Read in the input code from the user, split it per line
+    /// and create an array of InputLine objects, set as non executable
+    /// </summary>
+    protected void LoadInput() {
+        string[] loadedCommands = inputCode.Split('\n');
+        List<InputLine> lCommands = new List<InputLine>();
+        string[] thisCommand;
+        List<string> args;
+
+        for (int i = 0; i < loadedCommands.Length; i++) {
+            if (loadedCommands[i].Length <= 0) continue;
+            thisCommand = loadedCommands[i].Split();
+            // generate a list of arguments (everything in that line excluding inital command
+            args = new List<string>();
+            for (int j = 1; j < thisCommand.Length; j++) {
+                args.Add(thisCommand[j]);
+            }
+            // store it as a new InputLine struct
+            lCommands.Add(new InputLine(thisCommand[0], args));
+        }
+        commands = lCommands.ToArray(); 
+    }
+    protected void DebugLoad() {
+        LoadInput();
+        PreParseInput();
+
+        // debug
+        foreach (InputLine l in commands) {
+            Debug.Log(InputLine.GetString(l));
+        }
+    }
+    /// <summary>
+    /// This method needs to take in all the input lines, and decide which
+    /// ones are executable, and which ones are just loop marks
+    /// For 'mark x' we need to fill our markedLines dict, and set this line as non executable
+    /// 
+    /// commands: mark, wait, goto, seti, tjmp
+    /// </summary>
+    protected void PreParseInput() {
+        Debug.Log("PreParseInput");
+        int lastExecutable = 0;
+        bool wasExecutable = false;
+        bool anyExecutable = false;
+
+        for (int i = 0; i < commands.Length; i++) {
+            if (commands[i].command == "mark") {
+                commands[i].executable = false;
+                wasExecutable = false;
+                Mark(commands[i].arguments, i);
+            } else {
+                // unneccessary to do anything for goto, this should be handled differently when called
+                commands[i].executable = true;
+                // if this command is executable, and the previous wasn't,
+                // fill the InputField.nextExecutable field as this line.
+                if (!wasExecutable) {
+                    for (int j = lastExecutable; j < i; j++) {
+                        //Debug.Log("WasExecutable Loop: " + j.ToString() + " com: " + commands[i].command);
+                        commands[j].nextExecutable = i;
+                    }
+                }
+
+                commands[i].nextExecutable = i + 1;
+                wasExecutable = true;
+                anyExecutable = true;
+                lastExecutable = i;
+            }
+        }
+
+        commands[commands.Length - 1].nextExecutable = -1;
+        // if the first command line is not executable, we need to set the programCounter (which will denote the start 
+        if (!commands[0].executable) startProgramCounter = commands[0].nextExecutable;
+
+        CanExecute = anyExecutable;
+    }
+
+    public void StorePosition() {
+        PositionStored = true;
+        startPosition = thisRobot.transform.position;
+    }
+
+    /// <summary>
+    /// Pre execution setup of markedLines dictionary. This is necessary as the marked lines are 
+    /// not executed in program execution.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="thisLine"></param>
+    protected void Mark(List<string> command, int thisLine) {
+        // mark [command]
+        // store the current position as a position to return to
+        // NON EXECUTABLE FUNCTION
+        if (markedLines == null) markedLines = new Dictionary<string, int>();
+        if (command.Count != 1) throw new NotImplementedException();
+        if (!markedLines.ContainsKey(command[0])) markedLines.Add(command[0], thisLine); // add the current line as a location accessable through loops and goto
+    }
+
+    // Each of these execution functions should move the program counter themselves.
+    // ControllableObject specific functions should rely on the Interpreter to move the program counter
+    /// <summary>
+    /// Find the line marked by the given ID, and go to the next executable line after it
+    /// 
+    /// return: an int of the next command in 'commands' to execute
+    /// </summary>
+    /// <param name="command"></param>
+    /// <returns></returns>
+    protected int Goto(List<string> arguments, int programCounter) {
         // goto [mark]
         // jump to the given mark
-        // when we recieve the goto command, we want to check it's argument against the dictionary of marked locations, and change the programCounter to that value
-        if (command.Count != 2) throw new NotImplementedException();
-        if (!markedLines.ContainsKey(command[1])) throw new NotImplementedException();
+        // when we recieve the goto arguments, we want to check it's argument against the dictionary of marked locations, and change the programCounter to that value
+        if (arguments.Count != 1) throw new NotImplementedException();
+        if (!markedLines.ContainsKey(arguments[0])) throw new NotImplementedException();
 
-        programCounter = markedLines[command[1]] + 1;
+        return commands[markedLines[arguments[0]]].nextExecutable;
     }
-    protected void Mark(List<string> command) {
-        // mark [mark]
-        // store the current position as a position to return to
-        if (markedLines == null) markedLines = new Dictionary<string, int>();
-        if (command.Count != 2) throw new NotImplementedException();
-        if (!markedLines.ContainsKey(command[1])) markedLines.Add(command[1], programCounter); // add the current line as a location accessable through loops and goto
-
-        programCounter++;
-    }
-    protected void Wait(List<string> command) {
+    protected int Wait(List<string> arguments, int programCounter) {
         // wait [sec]
         // how are we going to implement wait?
         // does wait do nothing except wait on the current line for x actions?
         // or does it repeat the above line x times?
         // or should we have a seperate 'repi' for doing that
         // for now let's just wait on the current line
-        if (!Int32.TryParse(command[1], out int waitAmount)) throw new NotImplementedException();
+        if (!Int32.TryParse(arguments[0], out int waitAmount)) throw new NotImplementedException();
         if (!cur_waiting) {
             cur_wait_amount = waitAmount;
             cur_waiting = true;
         }
 
         if (waitAmount <= 1) {
-            commands[programCounter][1] = cur_wait_amount.ToString();
+            commands[programCounter].arguments[0] = cur_wait_amount.ToString();
             cur_waiting = false;
-            programCounter++;
+            return commands[programCounter].nextExecutable;
         } else {
             waitAmount--;
-            commands[programCounter][1] = waitAmount.ToString();
+            commands[programCounter].arguments[0] = waitAmount.ToString();
+            return programCounter;
         }
     }
-    protected void Seti(List<string> command) {
+    protected int Seti(List<string> arguments, int programCounter) {
         // seti [loc] [val]
         // set the given variable to the given value
-        if (!Int32.TryParse(command[2], out int value)) throw new NotImplementedException();
-        if (storedVariables is null) storedVariables = new Dictionary<string, int>();
-        if (!storedVariables.ContainsKey(command[1])) {
-            storedVariables.Add(command[1], value);
+        if (arguments.Count != 2) throw new NotImplementedException();
+        if (Int32.TryParse(arguments[1], out int value)) {
+            if (storedVariables is null) storedVariables = new Dictionary<string, int>();
+            if (!storedVariables.ContainsKey(arguments[0])) {
+                storedVariables.Add(arguments[0], value);
+            } else {
+                storedVariables[arguments[0]] = value;
+            }
         } else {
-            storedVariables[command[1]] = value;
-        }
-        programCounter++;
-    }
-    protected void Tjmp(List<string> command) {
-        // tjmp [loc] [mark]
-        // if the value of [loc] is greater than 0, jump to [mark]
-        if (storedVariables.TryGetValue(command[1], out int value)) {
-            if (value > 0) {
-                Goto(new List<string>() { "goto", command[2] });
+            // the second argument is not an int, it must be a variable
+            if (storedVariables.ContainsKey(arguments[1])) {
+                if (!storedVariables.ContainsKey(arguments[0])) {
+                    storedVariables.Add(arguments[0], storedVariables[arguments[1]]);
+                } else {
+                    storedVariables[arguments[0]] = storedVariables[arguments[1]];
+                }
+            } else {
+                throw new NotImplementedException();
             }
         }
+
+        return commands[programCounter].nextExecutable;
+    }
+    protected int Addi(List<string> arguments, int programCounter) {
+        if (arguments.Count != 2) throw new NotImplementedException();
+        if (!storedVariables.ContainsKey(arguments[0])) {
+            // the variable doesn't exist, what should the behaviour be?
+            storedVariables.Add(arguments[0], 0);
+        } else {
+            // the variable does exist
+            if (Int32.TryParse(arguments[1], out int add)) {
+                storedVariables[arguments[0]] += add;
+            } else {
+                if (storedVariables.ContainsKey(arguments[1])) {
+                    // the second argument is a variable
+                    storedVariables[arguments[0]] += storedVariables[arguments[1]];
+                } else {
+                    // the second argument is a variable that doesn't exist
+                    throw new NotImplementedException();
+                }
+            }
+        }
+        return commands[programCounter].nextExecutable;
+    }
+    protected int Tjmp(List<string> arguments, int programCounter) {
+        // tjmp [loc] [mark]
+        // if the value of [loc] is greater than 0, jump to [mark]
+        if (arguments.Count != 2) throw new NotImplementedException();
+        if (storedVariables.TryGetValue(arguments[0], out int value)) {
+            if (value > 0) {
+                return Goto(new List<string>() { arguments[1] }, programCounter);
+            } else {
+                return commands[programCounter].nextExecutable;
+            }
+        }
+        throw new NotImplementedException();
     }
 }

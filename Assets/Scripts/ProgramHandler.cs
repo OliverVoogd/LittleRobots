@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class ProgramHandler : MonoBehaviour
 {
@@ -11,32 +12,43 @@ public class ProgramHandler : MonoBehaviour
     /// 
     [SerializeField]
     float executeTime = 1; // in seconds
-
+    public float ExecuteTime {
+        get {
+            return executeTime;
+        }
+    }
     public Rect executeWindow = new Rect(Screen.width - 100, Screen.height - 50, 100, 50);
-    
     List<Interpreter> interpreters;
 
-    bool execute;
-    float timeElapsed = 0;
+    bool execute, justStopped = false;
+    float timeElapsed;
     // Start is called before the first frame update
     void Start()
     {
         execute = false;
+        timeElapsed = executeTime;
     }
 
+    // DEBUG var
+    [SerializeField]
+    Text t;
     // Update is called once per frame
     void Update()
     {
+        // alternative to clicking execute button
         if (Input.GetKeyDown(KeyCode.F1)) {
             execute = true;
-        }
-        if (Input.GetKeyDown(KeyCode.F2)) {
-            foreach (Interpreter i in interpreters) {
-                i.LoadInput();
-            }
+            RunPrograms();
         }
 
+        // execute the next click
         timeElapsed += Time.deltaTime;
+        if (justStopped && timeElapsed >= executeTime) {
+            foreach (Interpreter i in interpreters) {
+                i.ReWriteInput();
+                justStopped = false;
+            }
+        }
         if ((execute) && (timeElapsed >= executeTime)) {
             // we need to loop through all interpreters and execute the next line.
             // each interpreter should be responsible for managing loops, waits and gotos, and this class shouldn't have to worry about 
@@ -44,18 +56,31 @@ public class ProgramHandler : MonoBehaviour
             timeElapsed = 0;
             bool stillExecuting = false;
             foreach (Interpreter i in interpreters) {
-                i.ReWriteInput();
                 i.ExecuteNextLine();
 
                 stillExecuting = stillExecuting || i.CanExecute;
             }
-            if (!stillExecuting) execute = false;
+            if (!stillExecuting) {
+                execute = false;
+                justStopped = true;
+            }
+        }
 
+        if (!execute && Input.GetKeyDown(KeyCode.F3)) {
+            foreach(Interpreter i in interpreters) {
+                i.Reset();
+            }
         }
     }
 
     private void RunPrograms() {
-
+        foreach (Interpreter i in interpreters) {
+            i.Reset();
+            i.StartProgram();
+            if (!i.PositionStored) {
+                i.StorePosition();
+            }
+        }
     }
     public void StoreInterpreter(Interpreter i) {
         if (interpreters is null) interpreters = new List<Interpreter>();
@@ -63,14 +88,15 @@ public class ProgramHandler : MonoBehaviour
     }
 
     private void OnGUI() {
+        executeWindow = new Rect(Screen.width - 100, Screen.height - 50, 100, 50);
         executeWindow = GUI.Window(0, executeWindow, DoMyWindow, "");
+
+        
     }
 
     void DoMyWindow(int windowID) {
-        if (GUI.Button(new Rect(0, 0, 100, 50), "Execute")) {
-            foreach (Interpreter i in interpreters) {
-                i.LoadInput();
-            }
+        if (GUI.Button(new Rect(0, 0, 100, 50), "Execute") && !execute) {
+            RunPrograms();
             execute = true;
         }
     }

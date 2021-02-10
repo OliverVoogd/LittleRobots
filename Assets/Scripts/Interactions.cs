@@ -19,7 +19,7 @@ public class Interactions : MonoBehaviour {
     {
         if (Input.GetMouseButtonDown(0)) {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out RaycastHit hit, interactableMask)) {
+            if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, interactableMask)) {
                 Interactable hitObj = hit.transform.gameObject.GetComponent<Interactable>();
                 hitObj.OnClick();
             }

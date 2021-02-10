@@ -15,6 +15,14 @@ public class Grid : MonoBehaviour
     int gridHeight;
     public float gridSize;
 
+    public Vector3 GridClamp(Vector3 position) {
+        // clamps a given Vector3 to conform with the grid step
+        float new_x = Mathf.Floor(position.x / gridSize) * gridSize + (gridSize / 2);
+        float new_z = Mathf.Floor(position.z / gridSize) * gridSize + (gridSize / 2);
+        //Debug.Log(new_x.ToString() + ", " + new_z.ToString());
+        return new Vector3(new_x, position.y, new_z);
+    }
+
 
     private void Start() {
         
@@ -24,7 +32,7 @@ public class Grid : MonoBehaviour
     private void OnValidate() {
         GenerateGrid();
     }
-    void GenerateGrid() {
+    private void GenerateGrid() {
         Vector3 bottomLeft = new Vector3(gridXPos - (.5f * gridWidth * gridSize) + .5f * gridSize, .5f, gridYPos - (.5f * gridHeight * gridSize) + .5f * gridSize);
 
         grid = new Vector3[gridWidth, gridHeight];

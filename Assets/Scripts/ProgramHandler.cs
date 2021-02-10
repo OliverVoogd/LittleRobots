@@ -29,9 +29,6 @@ public class ProgramHandler : MonoBehaviour
         timeElapsed = executeTime;
     }
 
-    // DEBUG var
-    [SerializeField]
-    Text t;
     // Update is called once per frame
     void Update()
     {

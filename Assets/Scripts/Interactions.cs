@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Global Class for managing user interactions with interactable gameObject.
+/// </summary>
 public class Interactions : MonoBehaviour {
     [SerializeField]
     LayerMask interactableMask;

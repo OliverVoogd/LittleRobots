@@ -108,9 +108,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   thisRobot: {fileID: 0}
-  inputWindowVisible: 1
-  inputRectWidth: 200
-  inputRectHeight: 250
   robotController: {fileID: 0}
   startPosition: {x: 0, y: 0, z: 0}
 --- !u!114 &8600648710573988311
@@ -125,6 +122,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3258b69a8f67908439156e7ba0f4a361, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  baseWeight: 10
-  active: 1
+  commandNames:
+  - move
+  - wait
+  commandPrefabs:
+  - {fileID: 4172078300974361958, guid: b8a2b4dc228cc1240b92d29a1cbc365f, type: 3}
+  defaultPrefabs:
+  - {fileID: 3899532574018290796, guid: d7c299c9e68bba846979f81877746a41, type: 3}
   raisedHeight: 5
+  baseWeight: 10

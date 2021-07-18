@@ -12,11 +12,19 @@ using UnityEngine;
 [RequireComponent(typeof(Interpreter))]
 public abstract class InterpretedObject : MonoBehaviour
 {
+    [SerializeField]
+    string[] commandNames;
+    [SerializeField]
+    CommandLine[] commandPrefabs;
+    [SerializeField]
+    CommandLine[] defaultPrefabs;
+
+    CommandLine[] fullCommandPrefabs;
+    
     protected ProgramHandler handler;
     protected Interpreter interpreter;
+    protected CodeView codeView;
     protected int lastProgramCounter = -1;
-
-    public Dictionary<string, Action<List<string>>> commandDict;
 
     /// <summary>
     /// property for if this object has finished executing the
@@ -30,24 +38,48 @@ public abstract class InterpretedObject : MonoBehaviour
     
     protected virtual void Awake() {
         handler = FindObjectOfType<ProgramHandler>();
-        // add functions
-        commandDict = AddCommands();
 
-        AddInterpreter();
+        AddInterpreterandCodeView();
 
         FinishedExecutingCommand = true;
+    }
+
+    private void OnValidate() {
+        FillCommandNameArray();
+    }
+
+    /// <summary>
+    /// Populate the commandName array by getting all of the names of the commands and idk filling it
+    /// </summary>
+    private void FillCommandNameArray() {
+        fullCommandPrefabs = new CommandLine[commandPrefabs.Length + defaultPrefabs.Length];
+        commandNames = new string[commandPrefabs.Length + defaultPrefabs.Length];
+        for (int i = 0; i < commandPrefabs.Length; i++) {
+            commandNames[i] = commandPrefabs[i].getCommandName();
+            fullCommandPrefabs[i] = commandPrefabs[i];
+        }
+
+        for (int i = commandPrefabs.Length; i < commandPrefabs.Length + defaultPrefabs.Length; i++) {
+            commandNames[i] = defaultPrefabs[i - commandPrefabs.Length].getCommandName();
+            fullCommandPrefabs[i] = defaultPrefabs[i - commandPrefabs.Length];
+        }
     }
 
     /// <summary>
     /// Add an interpreter (auto created) to this game object,
     /// filling out any required fields
     /// </summary>
-    protected void AddInterpreter() {
+    protected void AddInterpreterandCodeView() {
         interpreter = gameObject.GetComponent<Interpreter>() as Interpreter;
         interpreter.thisRobot = gameObject;
         interpreter.robotController = this;
 
         handler.StoreInterpreter(interpreter);
+
+        codeView = handler.CreateCodeView();
+        FillCommandNameArray(); // ensure that commandNames is correct
+        // add to the commandNames and commandPrefabs the default commands??
+        codeView.SetCommandNamesAndPrefabs(commandNames, fullCommandPrefabs);
     }
 
     /// <summary>
@@ -58,14 +90,7 @@ public abstract class InterpretedObject : MonoBehaviour
     /// <param name="arguments"> a list of arguments for the specific command</param>
     /// <returns></returns>
     public void ExecuteCommand(string callCommand, List<string> arguments) {
-        // grab the first argument, the command itself
-        if (commandDict.ContainsKey(callCommand)) {
-            commandDict[callCommand](arguments);
-            // the list passed contains the command name at [0] and the other arguments from [1] onwards
-        } else {
-            throw new NotImplementedException(); // no command exists to handle the input
-        }
-
+        throw new NotImplementedException();
     }
 
     /// <summary>
@@ -75,10 +100,7 @@ public abstract class InterpretedObject : MonoBehaviour
         interpreter.DestroyInterpreter();
     }
 
-    /// <summary>
-    /// Populate the commandDict with the commands available for a user 
-    /// to call when writing in-game code.
-    /// </summary>
-    /// <returns>a Dictionary of program commands keyed by in-game code instruction</returns>
-    protected abstract Dictionary<string, Action<List<string>>> AddCommands();
+    public Command[] GetActiveCommands() {
+        return codeView.GetActiveCommands();
+    }
 }

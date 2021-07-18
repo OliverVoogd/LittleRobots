@@ -11,6 +11,12 @@ public class ProgramHandler : MonoBehaviour
     /// </summary>
     /// 
     [SerializeField]
+    CodeView codeViewPrefab;
+
+    [SerializeField]
+    Canvas canvas;
+
+    [SerializeField]
     float executeTime = 1; // in seconds
     public float ExecuteTime {
         get {
@@ -22,6 +28,7 @@ public class ProgramHandler : MonoBehaviour
 
     bool execute, justStopped = false;
     float timeElapsed;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -42,7 +49,7 @@ public class ProgramHandler : MonoBehaviour
         timeElapsed += Time.deltaTime;
         if (justStopped && timeElapsed >= executeTime) {
             foreach (Interpreter i in interpreters) {
-                i.ReWriteInput();
+                // i.ReWriteInput();
                 justStopped = false;
             }
         }
@@ -96,6 +103,12 @@ public class ProgramHandler : MonoBehaviour
             RunPrograms();
             execute = true;
         }
+    }
+
+    public CodeView CreateCodeView() {
+        CodeView view = Instantiate<CodeView>(codeViewPrefab, canvas.transform);
+
+        return view;
     }
 }
 

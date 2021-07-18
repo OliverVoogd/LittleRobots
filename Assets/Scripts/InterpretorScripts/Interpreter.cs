@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// 
+/// </summary>
 public class Interpreter : MonoBehaviour
 {
     /*
@@ -11,24 +14,18 @@ public class Interpreter : MonoBehaviour
      * Interpreter should be responsible for recieving the code as an array of InputLines?
      */
     // GameObjects
+    // These both refer to the same object
     public GameObject thisRobot = null;
-
-    // Input Objects
-    public bool inputWindowVisible = true;
-    [SerializeField]
-    private float inputRectWidth = 200;
-    [SerializeField]
-    private float inputRectHeight = 250;
-    private Rect inputRect = Rect.zero;
-    private bool reDrawWindow = false;
-    private string inputCode = "define func1\nmove up 2\nmove right 2\nmove down 5\nmove left 2\nmove up 3\nend\nmove right 1\ngoto func1\nwait 3\n";
-    //private string inputCode = 
-    //"move left 1\nmove right 1\nseti count 0\nmark first\nmove right 1\naddi count 1\nseti test count\naddi test -1\ntjmp test out\ngoto first\nmark out";
-
     public InterpretedObject robotController = null;
 
-    // UI objects
-    Camera cam;
+    /// <summary>
+    /// an array of the commands currently displayed in the CodeView object.
+    /// These commands will all be valid for this particular interpreted object
+    /// These commands can be parsed for command execution by an interpreter
+    /// </summary>
+    public Command[] activeCommands;
+
+    private ProgramLine[] commands;
 
     // private variables for code execution
     public bool CanExecute { get; private set; }
@@ -46,57 +43,23 @@ public class Interpreter : MonoBehaviour
     private Stack<int> returnProgramCounterPosition;
 
     // code execution
-    //List<List<string>> commands; // the lines that can actually be executed
-    public InputLine[] commands; // struct of all the lines.
     Dictionary<string, int> functionEntry;
     // remove markLines, replaced with functions???
     Dictionary<string, int> markedLines; // represents the 'marked' program lines we can make when executing the program, to facilitate loops and goto statements
     Dictionary<string, int> storedVariables; // contains variables stored by the user
 
     private void Start() {
-        // Setup required object references;
-        cam = GameObject.FindObjectOfType<Camera>();
-
         if (robotController is null) robotController = thisRobot.GetComponent<ControllableObject>();
-        SetupInputField();
 
         markedLines = new Dictionary<string, int>();
         functionEntry = new Dictionary<string, int>();
         returnProgramCounterPosition = new Stack<int>();
     }
 
-    private void SetupInputField() {
-        Vector3 screenPoint = cam.WorldToScreenPoint(transform.position);
-        inputRect = new Rect(screenPoint.x, Screen.height - screenPoint.y, inputRectWidth, inputRectHeight);
-    }
-
-    private void OnGUI() {
-        // all of this OnGUI stuff should be changed later, as it is only intended for development.
-        // might need to use the old InputField method again, inside a draggable object.
-        if (inputWindowVisible) {
-            inputRect = GUI.Window(this.GetInstanceID(), inputRect, MoveableCodeWindow, "Code Input");
-        }
-    }
-    protected void MoveableCodeWindow(int windowID) {
-        float tWidth = inputRectWidth * .01f;
-        float tHeight = inputRectHeight * .075f;
-        inputCode = GUI.TextArea(new Rect(tWidth, tHeight, inputRectWidth - (2f * tWidth), inputRectHeight - (tHeight * 1.1f)), inputCode);
-
-        if (GUI.Button(new Rect(inputRectWidth - 22, 2, 20, 15), "X")) {
-            Debug.Log("Cross");
-            inputWindowVisible = !inputWindowVisible;
-        }
-
-        GUI.DragWindow();
-    }
-
-
     /// <summary>
     /// This method needs to handle basic code syntax available to all robots, such as 'wait', 'goto', etc
     /// </summary>
     public void ExecuteNextLine() {
-        //if (robotController.FinishedExecutingCommand) programCounter = commands[programCounter].nextExecutable;
-
         if (!CanExecute) {
             return;
         }
@@ -105,19 +68,36 @@ public class Interpreter : MonoBehaviour
             // this should never enter
             programCounter = commands[programCounter].nextExecutable;
         }
+    
+        if (commands[programCounter].Type == "BuiltInCommand") {
+            BuiltInCommand currentCommand = (BuiltInCommand)commands[programCounter].command;
+        } else {
+            SpecialCommand currentCommand = (SpecialCommand)commands[programCounter].command;
 
-        if (CanExecute && robotController.FinishedExecutingCommand) {
+            if (currentCommand.Run(robotController) == CommandFinished.Finished) {
+                programCounter = commands[programCounter].nextExecutable;
+            } else {
+                // Don't change programCounter
+            }
+        }
+
+        if (programCounter >= commands.Length || programCounter < 0) {
+            CanExecute = false;
+            programCounter = -1;
+        }
+
+
+        /*
+         * OLD
+         * if (CanExecute && robotController.FinishedExecutingCommand) {
             ReWriteInput();
 
 
             string currentCommand = commands[programCounter].command;
             List<string> currentLine = commands[programCounter].arguments;
+            Debug.Log(String.Join(": ", currentLine));
             // check for basic instructions
             switch (currentCommand) {
-                case "end":
-                    programCounter = End(currentLine, programCounter);
-                    ExecuteNextLine();
-                    break;
                 case "goto":
                     programCounter = Goto(currentLine, programCounter); // this moves program counter itself
                     break;
@@ -139,36 +119,25 @@ public class Interpreter : MonoBehaviour
                     break;
             }
         }
-        if (programCounter >= commands.Length || programCounter < 0) {
-            CanExecute = false;
-            programCounter = -1;
-            //ReWriteInput();
-        }
-    }
-    public void ReWriteInput() {
-        if (commands != null) {
-            string[] joinedCommands = new string[commands.Length];
-            for (int i = 0; i < commands.Length; i++) {
-                joinedCommands[i] = String.Join(" ", commands[i].arguments);
-                joinedCommands[i] = commands[i].command + " " + joinedCommands[i];
-                if (i == programCounter) {
-                    joinedCommands[i] = "\t" + joinedCommands[i];
-                }
-            }
-            inputCode = String.Join("\n", joinedCommands);
-            //inputField.text = String.Join("\n", joinedCommands);
-        }
+        */
     }
 
     /// <summary>
     /// Reset the state of this interpreter, allowing the code to be read and executed again
     /// </summary>
     public void Reset() {
+        // what needs to be done to reset?
+        activeCommands = null;
+        commands = null;
+
         programCounter = 0;
         startProgramCounter = 0;
+
         // at this stage, reset moves the objects back to their start position, without animation
-        if (PositionStored)
+        if (PositionStored) {
             thisRobot.transform.position = startPosition;
+        }
+
         functionEntry = new Dictionary<string, int>();
         storedVariables = new Dictionary<string, int>();
     }
@@ -181,77 +150,42 @@ public class Interpreter : MonoBehaviour
         PreParseInput();
         programCounter = startProgramCounter;
     }
-    /// <summary>
-    /// Read in the input code from the user, split it per line
-    /// and create an array of InputLine objects, set as non executable
-    /// </summary>
-    protected void LoadInput() {
-        // THIS NEEDS TO CHANGE FOR NEW SYSTEM
-        string[] loadedCommands = inputCode.Split('\n');
-        List<InputLine> lCommands = new List<InputLine>();
-        string[] thisCommand;
-        List<string> args;
 
-        for (int i = 0; i < loadedCommands.Length; i++) {
-            if (loadedCommands[i].Length <= 0) continue;
-            thisCommand = loadedCommands[i].Split();
-            // generate a list of arguments (everything in that line excluding inital command
-            args = new List<string>();
-            for (int j = 1; j < thisCommand.Length; j++) {
-                args.Add(thisCommand[j]);
-            }
-            // store it as a new InputLine struct
-            lCommands.Add(new InputLine(thisCommand[0], args));
-        }
-        commands = lCommands.ToArray(); 
-    }
-    protected void DebugLoad() {
-        LoadInput();
-        PreParseInput();
-
-        // debug
-        foreach (InputLine l in commands) {
-            Debug.Log(InputLine.GetString(l));
-        }
-    }
     /// <summary>
-    /// This method needs to take in all the input lines, and decide which
-    /// ones are executable, and which ones are just loop marks
-    /// For define x, we fill our function definition dictionary, and continue until we reach 'end', then 
-    /// regular parsing can continue. Later, during program execution, when a function is called,
-    /// 'returnProgramCounterPosition' will be pushed to, the function will execute, and 'end' will return the programCounter
-    /// to whatever is on top of the returnProgramCounterPosition stack.
-    /// 
-    /// commands: mark, wait, goto, seti, tjmp
+    /// Build the Command[] of the available commands for execution
     /// </summary>
-    protected void PreParseInput() {
+    private void LoadInput() {
+        activeCommands = robotController.GetActiveCommands();
+    }
+
+    /// <summary>
+    /// Iterate over every Command in the activeCommands array and prepare it for
+    /// executation by building a ProgramLine array of the states of the program
+    /// </summary>
+    private void PreParseInput() {
+        commands = new ProgramLine[activeCommands.Length];
+
         int lastExecutable = 0;
-        int functionCount = 0;
         bool wasExecutable = false;
         bool anyExecutable = false;
 
-        for (int i = 0; i < commands.Length; i++) {
-            /*
-            if (commands[i].command == "mark") {
-                commands[i].executable = false;
-                wasExecutable = false;
-                Mark(commands[i].arguments, i);
-            }*/
-            if (commands[i].command == "define") {
-                functionCount++;
-                DefineFunction(commands[i].arguments, i + 1);
-            } else {
-                if (functionCount == 0) {
-                    startProgramCounter = i;
-                    functionCount = -10;
+        for (int i = 0; i < activeCommands.Length; i++) {
+            commands[i] = new ProgramLine(activeCommands[i]);
+
+            if (commands[i].Type == "BuiltInCommand") {
+                BuiltInCommand command = (BuiltInCommand)commands[i].command;
+
+                if (commands[i].Name == "mark") {
+                    commands[i].executable = false;
+                    wasExecutable = false;
+
+                    //Mark(commands[i].arguments, i);
                 }
 
-                if (commands[i].command == "end") functionCount--;
-
-                // unneccessary to do anything for goto, this should be handled differently when called
+            } else if (commands[i].Type == "SpecialCommand") {
+                SpecialCommand command = (SpecialCommand)commands[i].command;
                 commands[i].executable = true;
-                // if this command is executable, and the previous wasn't,
-                // fill the InputField.nextExecutable field as this line.
+
                 if (!wasExecutable) {
                     for (int j = lastExecutable; j < i; j++) {
                         commands[j].nextExecutable = i;
@@ -262,8 +196,15 @@ public class Interpreter : MonoBehaviour
                 wasExecutable = true;
                 anyExecutable = true;
                 lastExecutable = i;
+
+            } else {
+                throw new NotImplementedException();
             }
         }
+
+        commands[commands.Length - 1].nextExecutable = -1;
+        // if the first command line is not executable, we need to set the programCounter (which will denote the start 
+        if (!commands[0].executable) startProgramCounter = commands[0].nextExecutable;
 
         CanExecute = anyExecutable;
     }
@@ -334,28 +275,12 @@ public class Interpreter : MonoBehaviour
         if (returnProgramCounterPosition.Count == 0) throw new NotImplementedException();
         return returnProgramCounterPosition.Pop();
     }
-    protected int Wait(List<string> arguments, int programCounter) {
+    public void Wait() {
         // wait [sec]
-        // how are we going to implement wait?
-        // does wait do nothing except wait on the current line for x actions?
-        // or does it repeat the above line x times?
-        // or should we have a seperate 'repi' for doing that
-        // for now let's just wait on the current line
-        if (!Int32.TryParse(arguments[0], out int waitAmount)) throw new NotImplementedException();
-        if (!cur_waiting) {
-            cur_wait_amount = waitAmount;
-            cur_waiting = true;
-        }
 
-        if (waitAmount <= 1) {
-            commands[programCounter].arguments[0] = cur_wait_amount.ToString();
-            cur_waiting = false;
-            return commands[programCounter].nextExecutable;
-        } else {
-            waitAmount--;
-            commands[programCounter].arguments[0] = waitAmount.ToString();
-            return programCounter;
-        }
+        // How do we properly wait?
+        // just do nothing?
+        return;
     }
     protected int Seti(List<string> arguments, int programCounter) {
         // seti [loc] [val]
